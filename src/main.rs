@@ -9,6 +9,8 @@ use chrono::{DateTime, Utc};
 
 const SUPABASE_URL: &str = "https://drtejwkmjuwyqugpdspe.supabase.co";
 const SUPABASE_ANON_KEY: &str = "sb_publishable_0zSJqibEWNDVan_BOpvJDg_yYMdp9lO";
+const MAX_RESPONSE_SIZE: usize = 100_000; // 100 KB
+const MAX_BODY_SIZE: usize = 10_000; // 10 KB
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -317,14 +319,23 @@ impl App {
 
     fn save_to_history(&mut self) {
         if let (Some(token), Some(user_id)) = (&self.token, &self.user_id) {
+            // Truncate body and response to prevent flooding database
+            let truncated_body = if self.body.is_empty() {
+                None
+            } else {
+                Some(truncate_string(&self.body, MAX_BODY_SIZE))
+            };
+
+            let truncated_response = truncate_string(&self.response, MAX_RESPONSE_SIZE);
+
             let item = HistoryItem {
                 id: None,
                 user_id: user_id.clone(),
                 method: self.method.as_str().to_string(),
                 url: self.url.clone(),
-                body: if self.body.is_empty() { None } else { Some(self.body.clone()) },
+                body: truncated_body,
                 status: self.status.clone(),
-                response: self.response.clone(),
+                response: truncated_response,
                 time: self.time.clone(),
                 created_at: None,
             };
@@ -772,6 +783,15 @@ impl App {
             ui.add_space(10.0);
             ui.label(egui::RichText::new("Cmd+H: Toggle • Cmd+L: URL • Cmd+Enter: Send").size(10.0).color(egui::Color32::DARK_GRAY));
         });
+    }
+}
+
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        let truncated = &s[..max_len];
+        format!("{}... [truncated {} bytes]", truncated, s.len() - max_len)
     }
 }
 
